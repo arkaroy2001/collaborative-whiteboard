@@ -1,0 +1,17 @@
+# Local Postgres for development. Not used until Week 2, but standing it up now
+# is free. Bring it up with `pnpm db:up`, tear down with `pnpm db:down`.
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whiteboard
+      POSTGRES_PASSWORD: whiteboard
+      POSTGRES_DB: whiteboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - whiteboard_pgdata:/var/lib/postgresql/data
+
+volumes:
+  whiteboard_pgdata:
