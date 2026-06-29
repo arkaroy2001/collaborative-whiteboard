@@ -1,6 +1,10 @@
-# Claude Code / project working notes (kept out of the public repo)
+# Claude Code working notes (private)
 .claude/
-docs/
+
+# Project docs: track decision records + interview notes; keep the rest private
+docs/*
+!docs/decisions/
+!docs/interview-talking-points.md
 
 # Dependencies
 node_modules/

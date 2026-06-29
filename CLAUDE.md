@@ -52,6 +52,7 @@ boring, well-understood tech over novel choices.
 - Image upload
 - Layers, z-ordering beyond insertion order
 - Undo/redo
+- Pan/zoom / viewport — canvas is a single fixed world coordinate space
 - Real authentication / accounts
 - Mobile-specific UI
 - LaTeX rendering, AI features, periodic tables, or any vertical-specific add-ons
@@ -78,18 +79,40 @@ Client→server: `join`, `put` (create-or-replace element), `delete`, `cursor`.
 Server→client: `init`, `put`, `delete`, `cursor`, `peer_join`, `peer_leave`.
 Naive last-write-wins for now; CRDT replaces conflict handling in Week 3.
 
+**Two-layer model (decided — ADR-003).** Shared state splits into two strictly
+separate layers that never share a code path:
+- **Layer 1 — CRDT (canonical, persisted):** OR-Set for element existence +
+  one LWW-Register per mutable property + Lamport clocks (client-id tiebreak)
+  for ordering. Persisted to a Postgres op log. Survives reconnects, restarts,
+  drops. The source of truth for the canvas. (This resolves Q1.)
+- **Layer 2 — cosmetic broadcast (ephemeral, never persisted):** live cursors,
+  in-progress stroke previews, in-progress drag previews. Pure relay; never
+  hits Postgres; disappears on disconnect; no replay for late joiners. Only job
+  is making the UI feel live.
+- **Handoff:** gestures preview over Layer 2; the *committed* result (pen mouse-up,
+  drag mouse-up) lands in Layer 1 exactly once. Nothing mid-gesture is canonical.
+
 ## Active TODOs
 
-- [ ] **Protocol sign-off** before building both sides on it: confirm circle as
-      center+radius vs. bounding-box/ellipse; confirm one-socket-one-room.
-- [ ] Decide whether to **commit** the scaffold (currently uncommitted).
-- [ ] Decide the **permission allowlist / nvm-prefix** approach (see Known issues).
+- [x] **Protocol sign-off** done: circle = **center+radius** (true circle);
+      one-socket-one-room confirmed; element IDs & clientId are **client-minted**
+      from day 1 (ADR-004).
+- [x] Scaffold **committed** (`949dfc7`).
+- [x] **Permission allowlist dropped** — not pursuing the `.claude/settings.json`
+      allowlist; live with permission prompts.
 - [ ] Build the **Week 1 relay server** (`packages/server`): per-socket room,
       in-memory room state for late-joiner `init`, broadcast put/delete/cursor.
 - [ ] Build the **Week 1 canvas client**; hit two-tabs-drawing milestone.
-- [ ] Parked decisions: Q1 (CRDT model, W3), Q3 (concurrent move LWW, W3),
-      Q6 (persistence: op log + snapshot vs snapshot only, W2).
-- [ ] Confirm working assumptions: Q2 (atomic pen strokes), Q5 (50 in one room).
+- [x] Q1 (CRDT model) **resolved** — OR-Set + per-property LWW-Registers +
+      Lamport clocks; ephemeral cosmetic layer is separate (ADR-003).
+- [x] Q2 (pen strokes) **confirmed** — atomic in the canonical layer (one element,
+      immutable points[], one op); live preview streamed over the cosmetic layer
+      only (ADR-002, ADR-003).
+- [x] Q3 (concurrent move) **resolved** — LWW-Register write on position; implement
+      W3 (ADR-003).
+- [x] Q5 **confirmed** — ~50 clients in one room is the Week 5 stress target.
+- [x] Q6 (persistence) **resolved** — op log + periodic snapshot; load = latest
+      snapshot + replay newer ops. Layer-1 only; implement W2 (ADR-005).
 
 ## Known issues
 
@@ -98,11 +121,10 @@ Naive last-write-wins for now; CRDT replaces conflict handling in Week 3.
   `<cwd>/.claude/commands/`, and this session was rooted at the parent folder).
   Workaround: launch the next session from `whiteboard/`, or ask to "run the
   wrap/start routine" manually.
-- **`.claude/settings.json` permission allowlist not applied** — blocked by the
-  auto-mode safety classifier (broad `Bash(node *)`/`Bash(npx *)`), and the
-  proposed rules wouldn't match commands anyway because the nvm prefix makes
-  every shell command compound. Needs a decision (apply manually / tighten /
-  fix the nvm-prefix first).
+- **`.claude/settings.json` permission allowlist — dropped (decided 2026-06-29).**
+  Not pursuing it: the auto-mode safety classifier blocked the broad
+  `Bash(node *)`/`Bash(npx *)` rules, and the nvm prefix makes every command
+  compound so the rules wouldn't match anyway. Living with permission prompts.
 
 ---
 
